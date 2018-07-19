@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Photo Editor</string>
+
+    <array name="bg_options">
+        <item>Blur</item>
+        <item>Choose a pattern</item>
+        <item>Choose from gallery</item>
+    </array>
+
+    <array name="align_options">
+        <item>Centre</item>
+        <item>End</item>
+        <item>Start</item>
+    </array>
+
+</resources>
