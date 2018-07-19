@@ -1,19 +1,29 @@
 package com.example.vaibhav.photoeditor;
 
+import android.Manifest;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.PermissionInfo;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
+import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.renderscript.Allocation;
 import android.renderscript.Element;
 import android.renderscript.RenderScript;
 import android.renderscript.ScriptIntrinsicBlur;
+import android.support.annotation.NonNull;
+import android.support.annotation.RequiresPermission;
 import android.support.design.widget.FloatingActionButton;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -28,7 +38,11 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.security.Permissions;
 
 import static java.lang.Math.floorDiv;
 import static java.lang.Math.min;
@@ -41,6 +55,7 @@ public class EditActivity extends AppCompatActivity {
     private Spinner spinnerAlignment;
     private FloatingActionButton fabAddImage;
     private float blurScale=0.4f;
+    private String image_Name;
     private Bitmap bitmapImage,bmpBg,bmpBgCurrent;
     private Button btnChangeBg,btnSave;
     private int progressBlur,imageHeight,imageWidth,align=0;
@@ -99,7 +114,38 @@ public class EditActivity extends AppCompatActivity {
     private void saveImage() {
         Log.d(TAG, "saveImage: ");
 
-        
+        FileOutputStream stream;
+        String filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).toString()+"/GreatPhotosEdited";
+        File myDir = new File(filePath);
+        if (!myDir.exists()) myDir.mkdirs();
+        File file = new File(myDir,image_Name+"edited.jpg");
+        try {
+            Log.d(TAG, "saveImage: fone");
+            stream = new FileOutputStream(file);
+            BitmapDrawable drawable = (BitmapDrawable) imgSample.getDrawable();
+            Bitmap src = drawable.getBitmap();
+
+            src.compress(Bitmap.CompressFormat.JPEG,100,stream);
+            stream.close();
+
+            toastMessage("Image Saved Successfully!");
+
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            toastMessage("Error Couldnt Save the photo");
+            if (Build.VERSION.SDK_INT >= 23){
+                Log.d(TAG, "saveImage: moreBuild");
+                if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)!= PackageManager.PERMISSION_GRANTED){
+                    Log.d(TAG, "saveImage: Not granted");
+                    ActivityCompat.requestPermissions(EditActivity.this,new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE},1);
+                }
+            }
+            else Log.d(TAG, "saveImage: lessBuild");
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
     private void alignBg(int position) {
@@ -114,7 +160,7 @@ public class EditActivity extends AppCompatActivity {
         Log.d(TAG, "changeBgDialog: ");
 
         AlertDialog.Builder builder = new AlertDialog.Builder(EditActivity.this);
-        String[] array = {"Add or Edit Blur","Choose a pattern","Choose from gallery"};
+        String[] array = getResources().getStringArray(R.array.bg_options);
         builder.setSingleChoiceItems(array, -1, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int whichPos) {
@@ -133,7 +179,36 @@ public class EditActivity extends AppCompatActivity {
 
     }
 
-    private void choosePattern() { }
+    private void choosePattern() {
+        Log.d(TAG, "choosePattern: ");
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(EditActivity.this);
+        builder.setTitle("Select a Pattern");
+        String[] array = new String[5];
+        for (int i=1; i<=array.length; i++){
+            array[i-1] = "Pattern"+i;
+        }
+
+        builder.setSingleChoiceItems(array, -1, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+
+                Log.d(TAG, "onClick: "+which);
+                     if (which==0) bmpBg = BitmapFactory.decodeResource(EditActivity.this.getResources(),R.drawable.pattern1);
+                else if (which==1) bmpBg = BitmapFactory.decodeResource(EditActivity.this.getResources(),R.drawable.pattern2);
+                else if (which==2) bmpBg = BitmapFactory.decodeResource(EditActivity.this.getResources(),R.drawable.pattern3);
+                else if (which==3) bmpBg = BitmapFactory.decodeResource(EditActivity.this.getResources(),R.drawable.pattern4);
+                else if (which==4) bmpBg = BitmapFactory.decodeResource(EditActivity.this.getResources(),R.drawable.pattern5);
+
+                createBlurBackground(bmpBg,blurScale);
+                dialog.dismiss();
+            }
+        });
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+
+    }
 
     private void changeBlur() {
         Log.d(TAG, "changeBlur: ");
@@ -299,6 +374,9 @@ public class EditActivity extends AppCompatActivity {
         }
         oldImage = Bitmap.createScaledBitmap(oldImage, size,size, true);
         Bitmap temp = Bitmap.createBitmap(oldImage, startX, startY,size-startX,size-startY);
+
+        if (blurSc == 1f)
+            blurSc = 0.99f;
         if (blurSc != 0f)
             temp = blur(this, temp, blurSc, 7);
 
@@ -348,13 +426,17 @@ public class EditActivity extends AppCompatActivity {
             if (requestCode == REQUEST_IMAGE) {
                 Uri uriImage = data.getData();
                 try {
+                    File file = new File(uriImage.toString());
+                    image_Name = file.getName();
 
                     bitmapImage = MediaStore.Images.Media.getBitmap(getContentResolver(), uriImage);
+                    bmpBg = bitmapImage;
                     imageHeight = bitmapImage.getHeight();
                     imageWidth = bitmapImage.getWidth();
                     createBlurBackground(bitmapImage, blurScale);
 
                     fabAddImage.setVisibility(View.INVISIBLE);
+                    btnChangeBg.setVisibility(View.VISIBLE);
 
                 } catch (IOException e) {
                     toastMessage("Error! choose Another Image");
@@ -375,4 +457,38 @@ public class EditActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if(grantResults[0]== PackageManager.PERMISSION_GRANTED){
+            Log.v(TAG,"Permission: "+permissions[0]+ "was "+grantResults[0]);
+            //resume tasks needing this permission
+
+            FileOutputStream stream;
+            String filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).toString()+"/GreatPhotosEdited";
+            File myDir = new File(filePath);
+            if (!myDir.exists()) myDir.mkdirs();
+            File file = new File(myDir,image_Name+"edited.jpg");
+            try {
+                Log.d(TAG, "saveImage: fone");
+                stream = new FileOutputStream(file);
+                BitmapDrawable drawable = (BitmapDrawable) imgSample.getDrawable();
+                Bitmap src = drawable.getBitmap();
+
+                src.compress(Bitmap.CompressFormat.JPEG,100,stream);
+                stream.close();
+
+                toastMessage("Image Saved Successfully!");
+
+            }catch (FileNotFoundException e){
+                e.printStackTrace();
+                toastMessage("Could not load image");
+            }catch (IOException e){
+                e.printStackTrace();
+                toastMessage("Could not load image");
+            }
+        }
+        else Log.d(TAG, "onRequestPermissionsResult: "+grantResults[0]);
+    }
 }
